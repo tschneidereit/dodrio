@@ -271,7 +271,7 @@ impl VdomInnerExclusive {
         self.current_root = Some(current);
     }
 
-    fn diff<'a>(&self, registry: &mut EventsRegistry, old: Node<'a>, new: Node<'a>) {
+    fn diff<'a>(&mut self, registry: &mut EventsRegistry, old: Node<'a>, new: Node<'a>) {
         // debug!("---------------------------------------------------------");
         // debug!("dodrio::Vdom::diff");
         // debug!("  old = {:#?}", old);
@@ -323,7 +323,7 @@ impl VdomInnerExclusive {
     }
 
     fn diff_listeners<'a>(
-        &self,
+        &mut self,
         registry: &mut EventsRegistry,
         old: &'a [Listener<'a>],
         new: &'a [Listener<'a>],
@@ -357,7 +357,7 @@ impl VdomInnerExclusive {
         }
     }
 
-    fn diff_attributes(&self, old: &[Attribute], new: &[Attribute]) {
+    fn diff_attributes(&mut self, old: &[Attribute], new: &[Attribute]) {
         debug!("  updating attributes");
 
         // Do O(n^2) passes to add/update and remove attributes, since
@@ -392,7 +392,7 @@ impl VdomInnerExclusive {
     }
 
     fn diff_children<'a>(
-        &self,
+        &mut self,
         registry: &mut EventsRegistry,
         old: &'a [Node<'a>],
         new: &'a [Node<'a>],
@@ -449,7 +449,7 @@ impl VdomInnerExclusive {
         }
     }
 
-    fn create<'a>(&self, registry: &mut EventsRegistry, node: Node<'a>) {
+    fn create<'a>(&mut self, registry: &mut EventsRegistry, node: Node<'a>) {
         match node {
             Node::Text(TextNode { text }) => {
                 self.change_list.emit_create_text_node(text);
