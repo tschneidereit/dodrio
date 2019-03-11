@@ -9,172 +9,6 @@ function string(mem, pointer, length) {
   return decoder.decode(buf);
 }
 
-const OP_TABLE = [
-  // 0
-  function setText(changeList, mem8, mem32, i) {
-    const pointer = mem32[i++];
-    const length = mem32[i++];
-    const str = string(mem8, pointer, length);
-    top(changeList.stack).textContent = str;
-    return i;
-  },
-
-  // 1
-  function removeSelfAndNextSiblings(changeList, mem8, mem32, i) {
-    const node = changeList.stack.pop();
-    let sibling = node.nextSibling;
-    while (sibling) {
-      const temp = sibling.nextSibling;
-      sibling.remove();
-      sibling = temp;
-    }
-    node.remove();
-    return i;
-  },
-
-  // 2
-  function replaceWith(changeList, mem8, mem32, i) {
-    const newNode = changeList.stack.pop();
-    const oldNode = changeList.stack.pop();
-    oldNode.replaceWith(newNode);
-    changeList.stack.push(newNode);
-    return i;
-  },
-
-  // 3
-  function setAttribute(changeList, mem8, mem32, i) {
-    const nameId = mem32[i++];
-    const valueId = mem32[i++];
-    const name = changeList.getString(nameId);
-    const value = changeList.getString(valueId);
-    const node = top(changeList.stack);
-    node.setAttribute(name, value);
-
-    // Some attributes are "volatile" and don't work through `setAttribute`.
-    if (name === "value") {
-      node.value = value;
-    }
-    if (name === "checked") {
-      node.checked = true;
-    }
-    if (name === "selected") {
-      node.selected = true;
-    }
-
-    return i;
-  },
-
-  // 4
-  function removeAttribute(changeList, mem8, mem32, i) {
-    const nameId = mem32[i++];
-    const name = changeList.getString(nameId);
-    const node = top(changeList.stack);
-    node.removeAttribute(name);
-
-    // Some attributes are "volatile" and don't work through `removeAttribute`.
-    if (name === "value") {
-      node.value = null;
-    }
-    if (name === "checked") {
-      node.checked = false;
-    }
-    if (name === "selected") {
-      node.selected = false;
-    }
-
-    return i;
-  },
-
-  // 5
-  function pushFirstChild(changeList, mem8, mem32, i) {
-    changeList.stack.push(top(changeList.stack).firstChild);
-    return i;
-  },
-
-  // 6
-  function popPushNextSibling(changeList, mem8, mem32, i) {
-    const node = changeList.stack.pop();
-    changeList.stack.push(node.nextSibling);
-    return i;
-  },
-
-  // 7
-  function pop(changeList, mem8, mem32, i) {
-    changeList.stack.pop();
-    return i;
-  },
-
-  // 8
-  function appendChild(changeList, mem8, mem32, i) {
-    const child = changeList.stack.pop();
-    top(changeList.stack).appendChild(child);
-    return i;
-  },
-
-  // 9
-  function createTextNode(changeList, mem8, mem32, i) {
-    const pointer = mem32[i++];
-    const length = mem32[i++];
-    const text = string(mem8, pointer, length);
-    changeList.stack.push(document.createTextNode(text));
-    return i;
-  },
-
-  // 10
-  function createElement(changeList, mem8, mem32, i) {
-    const tagNameId = mem32[i++];
-    const tagName = changeList.getString(tagNameId);
-    changeList.stack.push(document.createElement(tagName));
-    return i;
-  },
-
-  // 11
-  function newEventListener(changeList, mem8, mem32, i) {
-    const eventId = mem32[i++];
-    const eventType = changeList.getString(eventId);
-    const a = mem32[i++];
-    const b = mem32[i++];
-    const el = top(changeList.stack);
-    const listener = new Listener(a, b, eventType, changeList.eventsTrampoline, el);
-    changeList.listeners.add(listener);
-    el.addEventListener(eventType, listener.callback);
-    el[`dodrio-${eventType}`] = listener;
-    return i;
-  },
-
-  // 12
-  function updateEventListener(changeList, mem8, mem32, i) {
-    const eventId = mem32[i++];
-    const eventType = changeList.getString(eventId);
-    const el = top(changeList.stack);
-    const listener = el[`dodrio-${eventType}`];
-    listener.a = mem32[i++];
-    listener.b = mem32[i++];
-    return i;
-  },
-
-  // 13
-  function removeEventListener(changeList, mem8, mem32, i) {
-    const eventId = mem32[i++];
-    const eventType = changeList.getString(eventId);
-    const el = top(changeList.stack);
-    const listener = el[`dodrio-${eventType}`];
-    el.removeEventListener(eventType, listener.callback);
-    changeList.listeners.delete(listener);
-    return i;
-  },
-
-  // 14
-  function addString(changeList, mem8, mem32, i) {
-    const pointer = mem32[i++];
-    const length = mem32[i++];
-    const id = mem32[i++];
-    const str = string(mem8, pointer, length);
-    changeList.addString(str, id);
-    return i;
-  }
-];
-
 class Listener {
   constructor(a, b, eventType, trampoline, el) {
     this.a = a;
@@ -247,9 +81,176 @@ class ChangeList {
 
   applyChangeRange(mem8, mem32, start, len) {
     const end = (start + len) / 4;
+    let changeList = this;
     for (let i = start / 4; i < end; ) {
       const op = mem32[i++];
-      i = OP_TABLE[op](this, mem8, mem32, i);
+      switch (op) {
+
+        // SetText
+        case 0: {
+          const pointer = mem32[i++];
+          const length = mem32[i++];
+          const str = string(mem8, pointer, length);
+          top(changeList.stack).textContent = str;
+          break;
+        }
+
+        // RemoveSelfAndNextSiblings
+        case 1: {
+          const node = changeList.stack.pop();
+          let sibling = node.nextSibling;
+          while (sibling) {
+            const temp = sibling.nextSibling;
+            sibling.remove();
+            sibling = temp;
+          }
+          node.remove();
+          break;
+        }
+
+        // ReplaceWith
+        case 2: {
+          const newNode = changeList.stack.pop();
+          const oldNode = changeList.stack.pop();
+          oldNode.replaceWith(newNode);
+          changeList.stack.push(newNode);
+          break;
+        }
+
+        // SetAttribute
+        case 3: {
+          const nameId = mem32[i++];
+          const valueId = mem32[i++];
+          const name = changeList.getString(nameId);
+          const value = changeList.getString(valueId);
+          const node = top(changeList.stack);
+          node.setAttribute(name, value);
+
+          // Some attributes are "volatile" and don't work through `setAttribute`.
+          if (name === "value") {
+            node.value = value;
+          }
+          if (name === "checked") {
+            node.checked = true;
+          }
+          if (name === "selected") {
+            node.selected = true;
+          }
+          break;
+        }
+
+        // RemoveAttribute
+        case 4: {
+          const nameId = mem32[i++];
+          const name = changeList.getString(nameId);
+          const node = top(changeList.stack);
+          node.removeAttribute(name);
+
+          // Some attributes are "volatile" and don't work through `removeAttribute`.
+          if (name === "value") {
+            node.value = null;
+          }
+          if (name === "checked") {
+            node.checked = false;
+          }
+          if (name === "selected") {
+            node.selected = false;
+          }
+          break;
+        }
+
+        // PushFirstChild
+        case 5: {
+          changeList.stack.push(top(changeList.stack).firstChild);
+          break;
+        }
+
+        // PopPushNextSibling
+        case 6: {
+          const node = changeList.stack.pop();
+          changeList.stack.push(node.nextSibling);
+          break;
+        }
+
+        // Pop
+        case 7: {
+          changeList.stack.pop();
+          break;
+        }
+
+        // AppendChild
+        case 8: {
+          const child = changeList.stack.pop();
+          top(changeList.stack).appendChild(child);
+          break;
+        }
+
+        // CreateTextNode
+        case 9: {
+          const pointer = mem32[i++];
+          const length = mem32[i++];
+          const text = string(mem8, pointer, length);
+          changeList.stack.push(document.createTextNode(text));
+          break;
+        }
+
+        // CreateElement
+        case 10: {
+          const tagNameId = mem32[i++];
+          const tagName = changeList.getString(tagNameId);
+          changeList.stack.push(document.createElement(tagName));
+          break;
+        }
+
+        // NewEventListener
+        case 11: {
+          const eventId = mem32[i++];
+          const eventType = changeList.getString(eventId);
+          const a = mem32[i++];
+          const b = mem32[i++];
+          const el = top(changeList.stack);
+          const listener = new Listener(a, b, eventType, changeList.eventsTrampoline, el);
+          changeList.listeners.add(listener);
+          el.addEventListener(eventType, listener.callback);
+          el["dodrio-" + eventType] = listener;
+          break;
+        }
+
+        // UpdateEventListener
+        case 12: {
+          const eventId = mem32[i++];
+          const eventType = changeList.getString(eventId);
+          const el = top(changeList.stack);
+          const listener = el["dodrio-" + eventType];
+          listener.a = mem32[i++];
+          listener.b = mem32[i++];
+          break;
+        }
+
+        // RemoveEventListener
+        case 13: {
+          const eventId = mem32[i++];
+          const eventType = changeList.getString(eventId);
+          const el = top(changeList.stack);
+          const listener = el["dodrio-" + eventType];
+          el.removeEventListener(eventType, listener.callback);
+          changeList.listeners.delete(listener);
+          break;
+        }
+
+        // AddString
+        case 14: {
+          const pointer = mem32[i++];
+          const length = mem32[i++];
+          const id = mem32[i++];
+          const str = string(mem8, pointer, length);
+          changeList.addString(str, id);
+          break;
+        }
+
+        default:
+          throw new Error("Unknown op: " + op);
+      }
     }
   }
 
